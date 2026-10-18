@@ -1,0 +1,74 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Journaux</title><style>
+:root{--bg:#f2f4f8;--c:#fff;--t:#161b22;--a:#2563eb;--m:#64748b;--b:#e2e8f0}@media(prefers-color-scheme:dark){:root{--bg:#0f1318;--c:#1a2029;--t:#e8ecf1;--m:#94a3b8;--b:#2b3441}}
+*{box-sizing:border-box}body{margin:0;font:16px system-ui,sans-serif;background:var(--bg);color:var(--t);padding-bottom:80px}
+header{background:var(--a);color:#fff;padding:calc(env(safe-area-inset-top,0px) + 14px) 16px 14px;display:flex;justify-content:space-between;align-items:center;font-size:18px}
+header .g{background:none;width:auto;font-size:22px;padding:0 4px}main{padding:12px}
+.card{background:var(--c);border-radius:14px;padding:14px;margin:10px 0;box-shadow:0 1px 3px #0001}
+h3{margin:0 0 8px}label{display:block;font-size:13px;color:var(--m);margin:10px 0 2px}
+input,select{font:inherit;width:100%;padding:12px;border-radius:10px;border:1px solid var(--b);background:var(--bg);color:var(--t)}
+button{font:inherit;width:100%;padding:13px;border:0;border-radius:10px;background:var(--a);color:#fff;margin-top:10px;font-weight:600}
+button.s,button.s2{background:var(--b);color:var(--t);font-weight:500}button.k{background:#dc2626}button.v{background:#16a34a}.row{display:flex;gap:8px}.row button{margin-top:8px}
+.sp{display:flex;justify-content:space-between;align-items:center;gap:8px}small{color:var(--m)}.ok{color:#16a34a}.ko{color:#dc2626}.big{font-size:26px;font-weight:700}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--c);border-top:1px solid var(--b);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav button{margin:0;border-radius:0;background:none;color:var(--m);font-size:13px;padding:14px 2px}nav button.on{color:var(--a);font-weight:700}
+.bg{position:fixed;inset:0;background:#0007;display:flex;align-items:flex-end;z-index:9}.sh{background:var(--c);width:100%;max-height:90vh;overflow:auto;border-radius:18px 18px 0 0;padding:18px 16px calc(env(safe-area-inset-bottom,0px) + 18px)}
+.hero{padding:80px 24px;text-align:center}.hero h1{font-size:34px}</style></head><body><div id="app"></div><nav id="nav"></nav><div id="m"></div>
+<script>
+const $=s=>document.querySelector(s),esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const eur=n=>(+n||0).toLocaleString("fr-FR",{style:"currency",currency:"EUR"}),today=()=>new Date().toISOString().slice(0,10);
+const ld=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch(e){return d}},uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+const sv=()=>{localStorage.setItem("db",JSON.stringify(D));localStorage.setItem("prof",JSON.stringify(P))};
+let D=ld("db",{w:[],r:[],d:[]}),P=ld("prof",{mode:"",name:"",d:[]}),tab="in",month=today().slice(0,7),day=today();
+const RT={paper:"par journal",day:"par jour",week:"par semaine",month:"par mois"},RO=Object.entries(RT);
+const W=id=>D.w.find(x=>x.id==id)||{name:"?"},R=id=>D.r.find(x=>x.id==id)||{name:"?"};
+const wk=d=>{const t=new Date(d);t.setDate(t.getDate()-((t.getDay()+6)%7));return t.toISOString().slice(0,10)};
+function pay(w,ds){if(!ds.length)return 0;const n=ds.reduce((a,x)=>a+x.count,0);
+ if(w.rt=="paper")return n*w.rate;if(w.rt=="day")return new Set(ds.map(x=>x.day)).size*w.rate;
+ if(w.rt=="week")return new Set(ds.map(x=>wk(x.day))).size*w.rate;return +w.rate}
+const okM=(m,wid)=>D.d.filter(x=>x.st=="ok"&&x.day.startsWith(m)&&(!wid||x.w==wid));
+function sheet(title,F,cb,label="Enregistrer"){m.innerHTML=`<div class=bg onclick="if(event.target==this)m.innerHTML=''"><div class=sh><h3>${title}</h3>${F.map(f=>`<label>${f.l}</label>`+(f.o?`<select id=f_${f.k}>${f.o.map(o=>`<option value="${esc(o[0])}" ${o[0]==f.v?"selected":""}>${esc(o[1])}</option>`).join("")}</select>`:`<input id=f_${f.k} type=${f.t||"text"} ${f.t=="number"?"inputmode=decimal step=any":""} ${f.dl?"list=dl_"+f.k:""} value="${esc(f.v??"")}">`+(f.dl?`<datalist id=dl_${f.k}>${f.dl.map(x=>`<option value="${esc(x)}">`).join("")}</datalist>`:""))).join("")}<button id=go>${label}</button><button class=s onclick="m.innerHTML=''">Annuler</button></div></div>`;
+ $("#go").onclick=()=>{const o={};F.forEach(f=>o[f.k]=$("#f_"+f.k).value);if(cb(o)!==false)m.innerHTML=""}}
+function draw(){if(!P.mode){app.innerHTML=`<div class=hero><h1>📰 Journaux</h1><p>Qui êtes-vous ?</p><button onclick="setMode('admin')">Je suis le patron</button><button class=s2 onclick="setMode('worker')">Je suis salarié</button></div>`;nav.innerHTML="";return}
+ const adm=P.mode=="admin",pe=D.d.filter(x=>x.st=="p").length,T=adm?[["in","Saisie"],["val","Valider"+(pe?" ("+pe+")":"")],["team","Équipe"],["rt","Tournées"],["rent","Résultats"]]:[];
+ if(adm&&!T.some(t=>t[0]==tab))tab="in";if(!adm)tab="dec";
+ app.innerHTML=`<header><b>📰 Journaux ${adm?"· Patron":"· "+esc(P.name)}</b><button class=g onclick="more()">⚙</button></header><main id=v></main>`;
+ nav.innerHTML=T.map(t=>`<button class="${tab==t[0]?"on":""}" onclick="tab='${t[0]}';draw()">${t[1]}</button>`).join("");V[tab]();scrollTo(0,0)}
+function setMode(md){if(md=="admin"){P.mode="admin";sv();draw()}else sheet("Votre prénom / nom",[{k:"n",l:"Nom (le patron vous reconnaîtra avec)"}],o=>{if(!o.n.trim())return false;P.mode="worker";P.name=o.n.trim();sv();draw()},"Continuer")}
+const nb=(m)=>(D.d.filter(x=>x.st=="ok"&&x.day.startsWith(m)).reduce((a,x)=>a+x.count,0));
+const V={
+in(){if(!D.w.length||!D.r.length){v.innerHTML=`<div class=card><h3>Bienvenue</h3>Créez d'abord au moins <b>un salarié</b> (onglet Équipe) et <b>une tournée</b> (onglet Tournées), ou importez le code d'un salarié (onglet Valider).</div>`;return}
+ const last=D.d.slice().sort((a,b)=>b.day.localeCompare(a.day)).slice(0,20);
+ v.innerHTML=`<button onclick="addD()">+ Saisir des journaux livrés</button><h3 style="margin-top:18px">Dernières saisies</h3>`+last.map(x=>`<div class=card><div class=sp><div><b>${esc(W(x.w).name)}</b> <small>${x.day}</small><br>${esc(R(x.r).name)} : <b>${x.count}</b> journaux ${x.st=="p"?"<small>(à valider)</small>":x.st=="ko"?'<small class=ko>(refusé)</small>':""}</div><button class=s style="width:auto" onclick="delD('${x.id}')">🗑</button></div></div>`).join("")},
+val(){const p=D.d.filter(x=>x.st=="p");v.innerHTML=`<button onclick="imp()">📥 Importer le code d'un salarié</button><h3 style="margin-top:18px">À valider (${p.length})</h3>`+(p.length?`<button class=v onclick="allOk()">Tout valider</button>`:"<small>Rien en attente.</small>")+p.map(x=>`<div class=card><b>${esc(W(x.w).name)}</b> <small>${x.day}</small><br>${esc(R(x.r).name)} : <span class=big>${x.count}</span><div class=row><button class=v onclick="st('${x.id}','ok')">Valider</button><button class=s onclick="fix('${x.id}')">Corriger</button><button class=k onclick="st('${x.id}','ko')">Refuser</button></div></div>`).join("")},
+team(){v.innerHTML=D.w.map(w=>`<div class=card><div class=sp><div><b>${esc(w.name)}</b><br><small>${RT[w.rt]} : ${eur(w.rate)}</small></div><div class=row><button class=s onclick="eW('${w.id}')">✏️</button><button class=s onclick="dW('${w.id}')">🗑</button></div></div></div>`).join("")+`<button onclick="eW()">+ Ajouter un salarié</button>`},
+rt(){v.innerHTML=`<small>Coûts exprimés par mois.</small>`+D.r.map(r=>`<div class=card><div class=sp><b>${esc(r.name)}</b><div class=row><button class=s onclick="eR('${r.id}')">✏️</button><button class=s onclick="dR('${r.id}')">🗑</button></div></div><small>Facturé : ${eur(r.pp)}/journal + forfait ${eur(r.flat)}<br>Gasoil ${eur(r.fuel)} · Impôts ${eur(r.tax)}<br>Véhicule ${eur(r.veh)} · Autres ${eur(r.oth)}</small></div>`).join("")+`<button onclick="eR()">+ Ajouter une tournée</button>`},
+rent(){const ds=okM(month),pw={};D.w.forEach(w=>{const q=ds.filter(x=>x.w==w.id),t=q.reduce((a,x)=>a+x.count,0),Pp=pay(w,q);q.forEach(x=>pw[x.r]=(pw[x.r]||0)+(t?Pp*x.count/t:0))});
+ let T=0;const rows=D.r.map(r=>{const n=ds.filter(x=>x.r==r.id).reduce((a,x)=>a+x.count,0),rev=n*r.pp+ +r.flat,cost=+r.fuel+ +r.tax+ +r.veh+ +r.oth,sal=pw[r.id]||0,pr=rev-cost-sal;T+=pr;
+ return `<div class=card><div class=sp><b>${esc(r.name)}</b><span class="big ${pr<0?"ko":"ok"}">${eur(pr)}</span></div><small>${n} journaux · Revenus ${eur(rev)}<br>Salaires ${eur(sal)} · Coûts ${eur(cost)}</small></div>`}).join("");
+ const sal=D.w.map(w=>{const q=ds.filter(x=>x.w==w.id);return `<div class=sp style="margin:6px 0"><span>${esc(w.name)} <small>${q.reduce((a,x)=>a+x.count,0)} journaux</small></span><b>${eur(pay(w,q))}</b></div>`}).join("");
+ v.innerHTML=`<input type=month value="${month}" onchange="month=this.value;V.rent()"><div class=card>Résultat du mois<br><span class="big ${T<0?"ko":"ok"}">${eur(T)}</span></div>${rows}<div class=card><h3>Paie du mois</h3>${sal||"<small>Aucun salarié</small>"}</div>`},
+dec(){const l=P.d.slice().sort((a,b)=>b.day.localeCompare(a.day)).slice(0,30);v.innerHTML=`<button onclick="decl()">+ Déclarer des journaux</button><button class=s onclick="send()">📤 Envoyer au patron</button><small style="display:block;margin-top:8px">Après avoir déclaré, envoyez le code au patron (WhatsApp, SMS…).</small><h3 style="margin-top:18px">Mes déclarations</h3>`+l.map(x=>`<div class=card><div class=sp><div><b>${x.c}</b> journaux · ${esc(x.r)}<br><small>${x.day}</small></div><button class=s style="width:auto" onclick="delP('${x.id}')">🗑</button></div></div>`).join("")}};
+function addD(){sheet("Journaux livrés",[{k:"w",l:"Salarié",o:D.w.map(w=>[w.id,w.name])},{k:"d",l:"Date",t:"date",v:day},...D.r.map(r=>({k:"r"+r.id,l:"Tournée : "+r.name+" (journaux)",t:"number"}))],o=>{const rs=D.r.filter(r=>+o["r"+r.id]>0);if(!rs.length){alert("Indiquez un nombre pour au moins une tournée");return false}
+ day=o.d;rs.forEach(r=>D.d.push({id:uid(),w:o.w,r:r.id,day:o.d,count:Math.round(+o["r"+r.id]),st:"ok"}));sv();draw()})}
+function decl(){sheet("Déclarer",[{k:"r",l:"Tournée (nom)",dl:[...new Set(P.d.map(x=>x.r))]},{k:"d",l:"Date",t:"date",v:day},{k:"c",l:"Nombre de journaux livrés",t:"number"}],o=>{if(!o.r.trim()||!(+o.c>0)){alert("Tournée et nombre obligatoires");return false}
+ day=o.d;P.d.push({id:uid(),day:o.d,r:o.r.trim(),c:Math.round(+o.c)});sv();draw()})}
+const cp=t=>navigator.clipboard?navigator.clipboard.writeText(t).then(()=>alert("Copié !"),()=>prompt("Copiez :",t)):prompt("Copiez :",t);
+function send(){const j=JSON.stringify({n:P.name,d:P.d.slice(-300).map(x=>({i:x.id,day:x.day,r:x.r,c:x.c}))}),msg="Mes déclarations de livraison :\nJRN1:"+btoa(unescape(encodeURIComponent(j)));
+ navigator.share?navigator.share({text:msg}).catch(()=>{}):cp(msg)}
+function imp(){sheet("Importer",[{k:"c",l:"Collez ici le message reçu du salarié"}],o=>{const mt=o.c.match(/JRN1:([A-Za-z0-9+\/=]+)/);if(!mt){alert("Code non reconnu");return false}
+ try{const j=JSON.parse(decodeURIComponent(escape(atob(mt[1])))),low=s=>s.trim().toLowerCase();let w=D.w.find(x=>low(x.name)==low(j.n));if(!w){w={id:uid(),name:j.n,rt:"paper",rate:0};D.w.push(w)}
+ let n=0;j.d.forEach(x=>{if(D.d.some(y=>y.id==x.i))return;let r=D.r.find(y=>low(y.name)==low(x.r));if(!r){r={id:uid(),name:x.r.trim(),pp:0,flat:0,fuel:0,tax:0,veh:0,oth:0};D.r.push(r)}D.d.push({id:x.i,w:w.id,r:r.id,day:x.day,count:x.c,st:"p"});n++});
+ sv();draw();alert(n+" nouvelle(s) déclaration(s) de "+j.n)}catch(e){alert("Code illisible");return false}},"Importer")}
+const st=(id,s)=>{D.d.find(x=>x.id==id).st=s;sv();draw()},allOk=()=>{D.d.forEach(x=>{if(x.st=="p")x.st="ok"});sv();draw()};
+function fix(id){const x=D.d.find(y=>y.id==id);sheet("Corriger le nombre",[{k:"c",l:"Journaux",t:"number",v:x.count}],o=>{x.count=Math.round(+o.c)||0;x.st="ok";sv();draw()},"Corriger et valider")}
+function delD(id){if(confirm("Supprimer ?")){D.d=D.d.filter(x=>x.id!=id);sv();draw()}}
+function delP(id){if(confirm("Supprimer ?")){P.d=P.d.filter(x=>x.id!=id);sv();draw()}}
+function eW(id){const w=D.w.find(x=>x.id==id)||{};sheet(id?"Modifier":"Nouveau salarié",[{k:"n",l:"Nom",v:w.name},{k:"t",l:"Type de paie",o:RO,v:w.rt||"paper"},{k:"r",l:"Tarif (€) selon le type",t:"number",v:w.rate}],o=>{if(!o.n.trim())return false;const a={name:o.n.trim(),rt:o.t,rate:+o.r||0};id?Object.assign(w,a):D.w.push({id:uid(),...a});sv();draw()})}
+function dW(id){if(confirm("Supprimer ce salarié et ses saisies ?")){D.w=D.w.filter(x=>x.id!=id);D.d=D.d.filter(x=>x.w!=id);sv();draw()}}
+function eR(id){const r=D.r.find(x=>x.id==id)||{};sheet(id?"Modifier":"Nouvelle tournée",[{k:"n",l:"Nom de la tournée",v:r.name},{k:"pp",l:"Prix facturé par journal (€)",t:"number",v:r.pp},{k:"flat",l:"Forfait mensuel facturé (€)",t:"number",v:r.flat},{k:"fuel",l:"Gasoil par mois (€)",t:"number",v:r.fuel},{k:"tax",l:"Impôts et cotisations par mois (€)",t:"number",v:r.tax},{k:"veh",l:"Véhicule, entretien, assurance par mois (€)",t:"number",v:r.veh},{k:"oth",l:"Autres coûts par mois (€)",t:"number",v:r.oth}],o=>{if(!o.n.trim())return false;const a={name:o.n.trim()};["pp","flat","fuel","tax","veh","oth"].forEach(k=>a[k]=+o[k]||0);id?Object.assign(r,a):D.r.push({id:uid(),...a});sv();draw()})}
+function dR(id){if(confirm("Supprimer cette tournée et ses saisies ?")){D.r=D.r.filter(x=>x.id!=id);D.d=D.d.filter(x=>x.r!=id);sv();draw()}}
+function more(){m.innerHTML=`<div class=bg onclick="if(event.target==this)m.innerHTML=''"><div class=sh><h3>Options</h3><button class=s onclick="cp(JSON.stringify(${P.mode=="admin"?"D":"P"}))">Copier une sauvegarde</button><button class=s onclick="rs()">Restaurer une sauvegarde</button><button class=s onclick="if(confirm('Changer de mode ?')){P.mode='';sv();m.innerHTML='';draw()}">Changer de mode</button><small>Version 4</small></div></div>`}
+function rs(){sheet("Restaurer",[{k:"c",l:"Collez la sauvegarde"}],o=>{try{const j=JSON.parse(o.c);if(j.w)D=j;else if(j.d&&j.mode!==undefined)P=j;else throw 0;sv();draw()}catch(e){alert("Sauvegarde invalide");return false}},"Restaurer")}
+draw()
+</script></body></html>
