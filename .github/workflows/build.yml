@@ -7,21 +7,40 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
+
+      - name: Trouver le dossier du projet
+        run: |
+          F=$(find . -name package.json -not -path "*/node_modules/*" | head -1)
+          if [ -z "$F" ]; then
+            echo "ERREUR: package.json introuvable dans le depot. Fichiers presents :"
+            find . -not -path "./.git/*" | head -50
+            exit 1
+          fi
+          echo "PROJ=$(dirname "$F")" >> $GITHUB_ENV
+          echo "Projet trouve dans : $(dirname "$F")"
+
       - run: npm install
+        working-directory: ${{ env.PROJ }}
+
       - run: npx cap sync android
+        working-directory: ${{ env.PROJ }}
+
       - name: Compiler l'APK
-        working-directory: android
+        working-directory: ${{ env.PROJ }}/android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
+
       - uses: actions/upload-artifact@v4
         with:
           name: journaux-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ env.PROJ }}/android/app/build/outputs/apk/debug/app-debug.apk
