@@ -6,20 +6,34 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: 20
+          node-version: 22
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Préparer le projet Android
+      - name: Verifier les fichiers
+        run: |
+          ls -la
+          test -f www/index.html || (echo "ERREUR: www/index.html est introuvable a la racine du depot" && exit 1)
+
+      - name: Creer la configuration si absente
+        run: |
+          if [ ! -f package.json ]; then
+            echo '{"name":"journaux","version":"1.0.0","private":true,"dependencies":{"@capacitor/android":"^6.1.2","@capacitor/core":"^6.1.2"},"devDependencies":{"@capacitor/cli":"^6.1.2"}}' > package.json
+          fi
+          if [ ! -f capacitor.config.json ]; then
+            echo '{"appId":"com.livraison.journaux","appName":"Journaux","webDir":"www"}' > capacitor.config.json
+          fi
+
+      - name: Preparer le projet Android
         run: |
           npm install
           if [ ! -d android ]; then npx cap add android; fi
