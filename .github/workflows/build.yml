@@ -4,9 +4,15 @@ on:
   push:
   workflow_dispatch:
 
+env:
+  APP_DIR: journaux-app-v2
+
 jobs:
   build:
     runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: journaux-app-v2
     steps:
       - uses: actions/checkout@v5
 
@@ -22,7 +28,7 @@ jobs:
       - name: Verifier les fichiers
         run: |
           ls -la
-          test -f www/index.html || (echo "ERREUR: www/index.html est introuvable a la racine du depot" && exit 1)
+          test -f www/index.html || (echo "ERREUR: www/index.html introuvable dans journaux-app-v2" && exit 1)
 
       - name: Creer la configuration si absente
         run: |
@@ -40,7 +46,7 @@ jobs:
           npx cap sync android
 
       - name: Compiler l'APK
-        working-directory: android
+        working-directory: journaux-app-v2/android
         run: |
           chmod +x gradlew
           ./gradlew assembleDebug
@@ -48,4 +54,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: journaux-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: journaux-app-v2/android/app/build/outputs/apk/debug/app-debug.apk
