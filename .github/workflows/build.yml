@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: 21
+          java-version: 17
 
       - name: Trouver le dossier du projet
         run: |
@@ -31,8 +31,12 @@ jobs:
       - run: npm install
         working-directory: ${{ env.PROJ }}
 
-      - run: npx cap sync android
+      - name: Creer le projet Android
         working-directory: ${{ env.PROJ }}
+        run: |
+          [ -d android ] || npx cap add android
+          [ -d assets ] && npx @capacitor/assets generate --android || true
+          npx cap sync android
 
       - name: Compiler l'APK
         working-directory: ${{ env.PROJ }}/android
