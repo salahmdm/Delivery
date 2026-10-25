@@ -1,7 +1,0 @@
-{
-  "appId": "fr.journaux.app",
-  "appName": "Journaux",
-  "webDir": "www",
-  "server": { "androidScheme": "https" },
-  "android": { "backgroundColor": "#eef1f5", "adjustMarginsForEdgeToEdge": "force" }
-}
