@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Journaux</string>
-    <string name="title_activity_main">Journaux</string>
-    <string name="package_name">fr.journaux.app</string>
-    <string name="custom_url_scheme">fr.journaux.app</string>
-</resources>
