@@ -1,0 +1,36 @@
+JOURNAUX - APPLICATION ANDROID (installable)
+=============================================
+
+Ce dossier contient l'application complète (aucune fonction retirée) :
+  index.html, manifest.webmanifest, sw.js, icon-192.png, icon-512.png, icon-maskable-512.png
+Il faut mettre ce dossier en ligne (adresse https), puis l'installer depuis Chrome.
+
+ETAPE 1 - Mettre le dossier en ligne (gratuit)
+  Option simple : Netlify Drop (app.netlify.com/drop) : glissez le dossier dans la page.
+  Autre option : GitHub Pages, Cloudflare Pages, ou votre hébergeur habituel.
+  Gardez bien l'adresse obtenue (elle doit commencer par https://).
+
+ETAPE 2 - Installer sur le téléphone Android
+  1. Ouvrez l'adresse dans Chrome.
+  2. Menu ⋮ > "Installer l'application" (ou "Ajouter à l'écran d'accueil").
+     Vous pouvez aussi utiliser Paramètres > "Installer l'application" dans l'app.
+  3. L'icône Journaux apparaît sur l'écran d'accueil ; l'app s'ouvre en plein écran
+     et fonctionne sans connexion.
+
+ETAPE 3 - Récupérer vos données de l'ancienne version
+  Les données sont stockées sur l'appareil, par adresse : la nouvelle app démarre vide.
+  1. Dans l'ancienne version : ⚙️ Paramètres > Sauvegarder mes données
+     (la sauvegarde est copiée ou partagée).
+  2. Dans la nouvelle app : ⚙️ Paramètres > Restaurer une sauvegarde > collez > Restaurer.
+  Faites-le avant de supprimer quoi que ce soit.
+
+NOTIFICATIONS
+  Autorisez les notifications quand Chrome le demande (Paramètres > Notifications).
+  Les rappels s'affichent quand l'application est ouverte ou récemment utilisée :
+  une appli web ne peut pas être réveillée à heure fixe quand elle est fermée.
+
+MISE A JOUR
+  Remplacez les fichiers en ligne : l'app se met à jour à la prochaine ouverture avec connexion.
+
+OBTENIR UN FICHIER APK / PUBLIER SUR GOOGLE PLAY (facultatif)
+  Une fois le site en ligne, pwabuilder.com peut générer un paquet Android à partir de l'adresse.
