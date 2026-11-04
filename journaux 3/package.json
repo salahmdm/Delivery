@@ -1,0 +1,26 @@
+{
+  "name": "journaux",
+  "version": "42.0.0",
+  "private": true,
+  "description": "Journaux : gestion des livraisons, salariés, paie et rentabilité — interface modernisée",
+  "scripts": {
+    "test": "node tests/security.test.js",
+    "android:init": "bash scripts/android-setup.sh",
+    "android:sync": "npx cap sync android",
+    "android:debug": "bash scripts/android-setup.sh && cd android && ./gradlew assembleDebug",
+    "android:release": "bash scripts/android-setup.sh && cd android && ./gradlew assembleRelease",
+    "check": "node --check tests/security.test.js"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.1.0",
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/filesystem": "^6.0.0",
+    "@capacitor/haptics": "^6.0.0",
+    "@capacitor/local-notifications": "^6.0.0",
+    "@capacitor/share": "^6.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.1.0",
+    "playwright": "^1.48.0"
+  }
+}
