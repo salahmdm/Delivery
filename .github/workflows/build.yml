@@ -20,8 +20,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK
-        uses: android-actions/setup-android@v3
+      # GitHub's Ubuntu runner already includes Android SDK command-line tools.
+      # Avoid android-actions/setup-android@v3 which may request obsolete 'tools'.
+      - name: Install Android platform 35
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME:-unset}"
+          sdkmanager --version
+          yes | sdkmanager --licenses > /dev/null || true
+          sdkmanager --install 'platforms;android-35' 'build-tools;35.0.0' 'platform-tools'
 
       - name: Install Gradle 8.13
         uses: gradle/actions/setup-gradle@v4
