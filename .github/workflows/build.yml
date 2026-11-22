@@ -9,45 +9,75 @@ permissions:
 
 jobs:
   build:
-    name: Compiler Remote Sharp 0.1.14
+    name: Compiler Remote Sharp avec le mode écoute
     runs-on: ubuntu-24.04
 
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v5
+        with:
+          lfs: true
 
-      - name: Décompresser le projet
+      - name: Trouver les sources Remote Sharp
         shell: bash
         run: |
           set -euo pipefail
 
-          archive="$GITHUB_WORKSPACE/Remote-Sharp-0.1.14-Sources.zip"
-          destination="$RUNNER_TEMP/remote-sharp"
+          chercher_projet() {
+            local racine="$1"
+            local wrapper dossier
+            while IFS= read -r -d '' wrapper; do
+              dossier="$(dirname "$wrapper")"
+              if [[ -f "$dossier/settings.gradle.kts" &&
+                    -f "$dossier/app/build.gradle.kts" &&
+                    -f "$dossier/app/src/main/java/fr/remote/sharp/EventListener.java" ]]; then
+                printf '%s\n' "$dossier"
+                return 0
+              fi
+            done < <(find "$racine" -name .git -prune -o -type f -name gradlew -print0)
+            return 1
+          }
 
-          if [[ ! -f "$archive" ]]; then
-            echo "::error::Place Remote-Sharp-0.1.14-Sources.zip à la racine du dépôt."
-            exit 1
+          # Cas 1 : les sources sont déjà décompressées dans le dépôt.
+          if projet="$(chercher_projet "$GITHUB_WORKSPACE")"; then
+            echo "Projet trouvé dans le dépôt : $projet"
+            echo "PROJ=$projet" >> "$GITHUB_ENV"
+            exit 0
           fi
 
-          mkdir -p "$destination"
-          unzip -q "$archive" -d "$destination"
+          # Cas 2 : les sources se trouvent dans une archive ZIP.
+          nombre_zip=0
+          while IFS= read -r -d '' archive; do
+            nombre_zip=$((nombre_zip + 1))
+            echo "Archive examinée : ${archive#"$GITHUB_WORKSPACE"/}"
 
-          projets=()
-          while IFS= read -r -d '' wrapper; do
-            dossier="$(dirname "$wrapper")"
-            if [[ -f "$dossier/settings.gradle.kts" &&
-                  -f "$dossier/app/src/main/java/fr/remote/sharp/EventListener.java" ]]; then
-              projets+=("$dossier")
+            # Seules les archives contenant le mode écoute sont extraites.
+            if ! unzip -Z1 "$archive" > "$RUNNER_TEMP/remote-sharp-contenu.txt"; then
+              echo "::warning::Archive ZIP illisible : $archive"
+              continue
             fi
-          done < <(find "$destination" -type f -name gradlew -print0)
+            if ! grep -Eq '(^|/)app/src/main/java/fr/remote/sharp/EventListener\.java$' \
+                "$RUNNER_TEMP/remote-sharp-contenu.txt"; then
+              echo "Mode écoute absent de cette archive."
+              continue
+            fi
 
-          if [[ ${#projets[@]} -ne 1 ]]; then
-            echo "::error::Le ZIP doit contenir un seul projet Remote Sharp 0.1.14 avec gradlew et EventListener.java."
-            exit 1
+            destination="$(mktemp -d "$RUNNER_TEMP/remote-sharp.XXXXXX")"
+            unzip -q "$archive" -d "$destination"
+            if projet="$(chercher_projet "$destination")"; then
+              echo "Projet sélectionné depuis : ${archive#"$GITHUB_WORKSPACE"/}"
+              echo "PROJ=$projet" >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done < <(find "$GITHUB_WORKSPACE" -name .git -prune -o \
+                    -type f -iname '*.zip' -print0)
+
+          if [[ "$nombre_zip" -eq 0 ]]; then
+            echo "::error::Cette branche ne contient ni ZIP ni projet décompressé avec EventListener.java. Ajoute le ZIP des sources 0.1.14 sur cette même branche."
+          else
+            echo "::error::Aucun des $nombre_zip ZIP examinés ne contient le projet complet avec le mode écoute. Vérifie que tu as envoyé le ZIP produit par le générateur 0.1.14."
           fi
-
-          echo "PROJ=${projets[0]}" >> "$GITHUB_ENV"
-          echo "Projet trouvé dans ${projets[0]}"
+          exit 1
 
       - name: Installer Java 21
         uses: actions/setup-java@v5
