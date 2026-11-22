@@ -30,9 +30,9 @@ jobs:
           root = Path(os.environ['GITHUB_WORKSPACE'])
           candidates = sorted(root.rglob('app/build.gradle.kts'))
           if not candidates:
-              archives = sorted(root.rglob('TelecommandeWifi-source (1).zip'))
+              archives = sorted(root.rglob('TelecommandeWifi-v03-source.zip'))
               if len(archives) != 1:
-                  raise SystemExit('Projet introuvable. Ajoute TelecommandeWifi-source (1).zipau depot, ou decompresse son contenu.')
+                  raise SystemExit('Projet introuvable. Ajoute TelecommandeWifi-v03-source.zip au depot, ou decompresse son contenu.')
               dest = Path(os.environ['RUNNER_TEMP']) / 'telecommande-extracted'
               dest.mkdir(parents=True, exist_ok=True)
               with ZipFile(archives[0]) as z:
