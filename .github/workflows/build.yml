@@ -1,101 +1,175 @@
-name: Build APK Remote Sharp
-
-on:
-  push:
-  workflow_dispatch:
-
+name: Remote Sharp 0.1.14
+on: [push, workflow_dispatch]
 permissions:
   contents: read
-
 jobs:
-  build:
-    name: Compiler Remote Sharp avec le mode écoute
+  apk:
     runs-on: ubuntu-24.04
-
     steps:
-      - name: Récupérer le dépôt
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           lfs: true
-
-      - name: Trouver les sources Remote Sharp
-        shell: bash
+      - name: Préparer les sources 0.1.14 depuis le ZIP 0.1.13
+        shell: python
         run: |
-          set -euo pipefail
-
-          chercher_projet() {
-            local racine="$1"
-            local wrapper dossier
-            while IFS= read -r -d '' wrapper; do
-              dossier="$(dirname "$wrapper")"
-              if [[ -f "$dossier/settings.gradle.kts" &&
-                    -f "$dossier/app/build.gradle.kts" &&
-                    -f "$dossier/app/src/main/java/fr/remote/sharp/EventListener.java" ]]; then
-                printf '%s\n' "$dossier"
-                return 0
-              fi
-            done < <(find "$racine" -name .git -prune -o -type f -name gradlew -print0)
-            return 1
+          import os
+          from pathlib import Path
+          from zipfile import ZipFile
+          
+          workspace = Path(os.environ["GITHUB_WORKSPACE"])
+          archives = list(workspace.rglob("Remote-Sharp-0.1.13-Sources.zip"))
+          if len(archives) != 1:
+              raise SystemExit("Une archive Remote-Sharp-0.1.13-Sources.zip est attendue.")
+          dest = Path(os.environ["RUNNER_TEMP"]) / "sharp-sources"
+          dest.mkdir()
+          with ZipFile(archives[0]) as archive:
+              for member in archive.namelist():
+                  if not (dest / member).resolve().is_relative_to(dest.resolve()):
+                      raise SystemExit("Chemin ZIP invalide")
+              archive.extractall(dest)
+          roots = [p.parent for p in dest.rglob("gradlew") if (p.parent / "app/build.gradle.kts").exists()]
+          if len(roots) != 1:
+              raise SystemExit("Projet Android introuvable ou ambigu")
+          project = roots[0]
+          module = project / "app/src/main/java/fr/remote/sharp"
+          patches = [
+              ("app/build.gradle.kts", "versionCode = 14", "versionCode = 15"),
+              ("app/build.gradle.kts", "versionName = \"0.1.13\"", "versionName = \"0.1.14\""),
+              ("app/build.gradle.kts", "applicationId = \"fr.remote.apple.sharp\"", "applicationId = \"fr.remote.apple.sharp.listen\""),
+              ("SharpWire.java", "private static Target discover(String ip,int port,Report report,boolean inventory) throws Exception {", "private static Target discover(String ip,int port,Report report,boolean inventory) throws Exception {\n        return discover(ip,port,report,inventory,null);\n    }\n    static void listenEvents(String ip,Report report) throws Exception {\n        host(ip);\n        List<EventListener.Feed> feeds = new ArrayList<>();\n        discover(ip,0,report,true,feeds);\n        EventListener.listen(ip,feeds,report);\n    }\n    private static Target discover(String ip,int port,Report report,boolean inventory,List<EventListener.Feed> feeds) throws Exception {"),
+              ("SharpWire.java", "report.line(\"Service annoncé · \"+type);", "if(feeds!=null){\n                        if(type.equals(\"urn:schemas-upnp-org:service:RenderingControl:1\") || type.equals(\"urn:schemas-awox-com:service:X_ServiceManager:1\")){\n                            String path=field(service,\"eventSubURL\");\n                            if(!path.isEmpty()){\n                                URL end=localURL(ip,base,path);\n                                boolean exists=false;\n                                for(EventListener.Feed f:feeds) if(f.endpoint.toExternalForm().equals(end.toExternalForm()))exists=true;\n                                if(!exists)feeds.add(new EventListener.Feed(end,type));\n                            }\n                        }\n                        continue;\n                    }\n                    report.line(\"Service annoncé · \"+type);"),
+              ("ReportActivity.java", "private Button copy;", "private Button copy, listen;\n    private Thread listener;"),
+              ("ReportActivity.java", "copy=button(this,\"Copier le résultat\");", "listen=button(this,\"Écouter la télécommande · 30 s\");add(root,listen);listen.setEnabled(false);\n        listen.setOnClickListener(v->startListening());\n        copy=button(this,\"Copier le résultat\");"),
+              ("ReportActivity.java", "if(!isDestroyed())copy.setEnabled(true);", "if(!isDestroyed()){copy.setEnabled(true);listen.setEnabled(true);}"),
+              ("ReportActivity.java", "    private void runReport(){", "    private void startListening(){\n        String host=VolumeRoute.prefs.getString(\"draftIP\",\"192.168.1.14\");\n        listen.setEnabled(false);copy.setEnabled(false);\n        result.setText(\"Écoute Sharp · \"+host+\"\\nPréparation…\");\n        listener=new Thread(()->{\n            try{SharpWire.listenEvents(host,this::line);}\n            catch(Exception e){line(\"Écoute interrompue · \"+e.getMessage());}\n            finally{runOnUiThread(()->{if(!isDestroyed()){listen.setEnabled(true);copy.setEnabled(true);}});}\n        },\"Sharp-UPnP\");\n        listener.start();\n    }\n    @Override public void onDestroy(){\n        if(listener!=null)listener.interrupt();\n        super.onDestroy();\n    }\n    private void runReport(){"),
+          ]
+          for filename, old, new in patches:
+              path = (project if "/" in filename else module) / filename
+              source = path.read_text(encoding="utf-8")
+              if source.count(old) != 1:
+                  raise SystemExit(f"Source différente de la 0.1.13 attendue : {filename} / {old[:70]}")
+              path.write_text(source.replace(old, new), encoding="utf-8")
+          (module / "EventListener.java").write_text(r'''package fr.remote.sharp;
+          
+          import java.io.*;
+          import java.net.*;
+          import java.nio.charset.StandardCharsets;
+          import java.util.*;
+          
+          /** One bounded, read-only observation on the LAN. */
+          final class EventListener {
+              static final class Feed {
+                  final URL endpoint;
+                  final String service, path = "/" + UUID.randomUUID();
+                  String sid;
+                  Feed(URL url, String type) { endpoint = url; service = type; }
+              }
+          
+              private static String line(InputStream in) throws IOException {
+                  ByteArrayOutputStream out = new ByteArrayOutputStream();
+                  for (int c; (c = in.read()) != -1;) {
+                      if (c == '\n') return out.toString("ISO-8859-1").replace("\r", "");
+                      if (out.size() >= 8192) throw new IOException("En-tête trop long");
+                      out.write(c);
+                  }
+                  throw new EOFException();
+              }
+          
+              private static Map<String,String> headers(InputStream in) throws IOException {
+                  Map<String,String> h = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+                  for (int i = 0; i < 64; i++) {
+                      String s = line(in);
+                      if (s.isEmpty()) return h;
+                      int split = s.indexOf(':');
+                      if (split > 0) h.put(s.substring(0,split).trim(),s.substring(split+1).trim());
+                  }
+                  throw new IOException("Trop d’en-têtes");
+              }
+          
+              private static void send(OutputStream out,String text) throws IOException {
+                  out.write(text.getBytes(StandardCharsets.ISO_8859_1)); out.flush();
+              }
+          
+              private static Map<String,String> request(Feed f,String method,String extra) throws IOException {
+                  int port = f.endpoint.getPort() < 0 ? 80 : f.endpoint.getPort();
+                  try (Socket sock = new Socket()) {
+                      sock.connect(new InetSocketAddress(f.endpoint.getHost(),port),2000);
+                      sock.setSoTimeout(2500);
+                      send(sock.getOutputStream(),method+" "+f.endpoint.getFile()+" HTTP/1.1\r\nHOST: "+
+                          f.endpoint.getHost()+":"+port+"\r\n"+extra+"Connection: close\r\n\r\n");
+                      InputStream in = new BufferedInputStream(sock.getInputStream());
+                      String status = line(in);
+                      if (!status.matches("HTTP/1\\.[01] 2\\d\\d( .*|)")) throw new IOException(status);
+                      return headers(in);
+                  }
+              }
+          
+              static void listen(String host,List<Feed> feeds,SharpWire.Report report) throws Exception {
+                  if (feeds.isEmpty()) {report.line("Aucune adresse de notification annoncée."); return;}
+                  InetAddress tv = InetAddress.getByName(host);
+                  try (DatagramSocket route = new DatagramSocket()) {
+                      route.connect(tv,1900);
+                      InetAddress local = route.getLocalAddress();
+                      try (ServerSocket server = new ServerSocket(0,12,local)) {
+                          server.setSoTimeout(400);
+                          boolean subscribed = false;
+                          try {
+                              for (Feed f : feeds) {
+                                  if (Thread.currentThread().isInterrupted()) return;
+                                  String callback = "http://"+local.getHostAddress()+":"+server.getLocalPort()+f.path;
+                                  try {
+                                      f.sid=request(f,"SUBSCRIBE","CALLBACK: <"+callback+">\r\nNT: upnp:event\r\nTIMEOUT: Second-60\r\n").get("SID");
+                                      if (f.sid==null || !f.sid.matches("uuid:[A-Za-z0-9:._-]{1,160}")) {
+                                          f.sid=null; throw new IOException("SID absent ou invalide");
+                                      }
+                                      subscribed=true; report.line("Abonnement accepté · "+f.service);
+                                  } catch(IOException e) {report.line(f.service+" · "+e.getMessage());}
+                              }
+                              if (!subscribed) return;
+                              report.line("Écoute pendant 30 secondes. Sur la télécommande Sharp, appuie sur + puis sur − à quelques secondes d’intervalle.");
+                              long start=System.nanoTime(); int count=0;
+                              while (System.nanoTime()-start<30000000000L && !Thread.currentThread().isInterrupted()) {
+                                  try (Socket peer=server.accept()) {
+                                      if (!tv.equals(peer.getInetAddress())) continue;
+                                      peer.setSoTimeout(1800);
+                                      InputStream in=new BufferedInputStream(peer.getInputStream());
+                                      String[] first=line(in).split(" "); Map<String,String> h=headers(in);
+                                      Feed source=null;
+                                      for (Feed f:feeds) if(first.length==3 && "NOTIFY".equals(first[0]) && f.path.equals(first[1]) && f.sid!=null && f.sid.equals(h.get("SID"))) source=f;
+                                      if(source==null) {send(peer.getOutputStream(),"HTTP/1.1 412 Precondition Failed\r\nContent-Length: 0\r\n\r\n");continue;}
+                                      int size=Integer.parseInt(h.getOrDefault("Content-Length","-1"));
+                                      if(size<0 || size>65536) throw new IOException("Taille de notification non prise en charge");
+                                      byte[] data=new byte[size];new DataInputStream(in).readFully(data);
+                                      send(peer.getOutputStream(),"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n");
+                                      String body=new String(data,StandardCharsets.UTF_8);
+                                      count++;
+                                      if(count<=40)report.line("+"+((System.nanoTime()-start)/1000000000L)+" s · "+source.service+" · séquence "+h.get("SEQ")+"\n"+body.substring(0,Math.min(4096,body.length())));
+                                  } catch(SocketTimeoutException timeout) { /* Normal while waiting. */ }
+                                    catch(IOException|NumberFormatException e){report.line("Notification illisible · "+e.getMessage());}
+                              }
+                              report.line(count+" notification(s) reçue(s), état initial compris. Une notification ne prouve pas que le volume est modifiable.");
+                          } finally {
+                              for(Feed f:feeds) if(f.sid!=null) try{request(f,"UNSUBSCRIBE","SID: "+f.sid+"\r\n");}catch(IOException ignored){}
+                          }
+                      }
+                  }
+              }
           }
-
-          # Cas 1 : les sources sont déjà décompressées dans le dépôt.
-          if projet="$(chercher_projet "$GITHUB_WORKSPACE")"; then
-            echo "Projet trouvé dans le dépôt : $projet"
-            echo "PROJ=$projet" >> "$GITHUB_ENV"
-            exit 0
-          fi
-
-          # Cas 2 : les sources se trouvent dans une archive ZIP.
-          nombre_zip=0
-          while IFS= read -r -d '' archive; do
-            nombre_zip=$((nombre_zip + 1))
-            echo "Archive examinée : ${archive#"$GITHUB_WORKSPACE"/}"
-
-            # Seules les archives contenant le mode écoute sont extraites.
-            if ! unzip -Z1 "$archive" > "$RUNNER_TEMP/remote-sharp-contenu.txt"; then
-              echo "::warning::Archive ZIP illisible : $archive"
-              continue
-            fi
-            if ! grep -Eq '(^|/)app/src/main/java/fr/remote/sharp/EventListener\.java$' \
-                "$RUNNER_TEMP/remote-sharp-contenu.txt"; then
-              echo "Mode écoute absent de cette archive."
-              continue
-            fi
-
-            destination="$(mktemp -d "$RUNNER_TEMP/remote-sharp.XXXXXX")"
-            unzip -q "$archive" -d "$destination"
-            if projet="$(chercher_projet "$destination")"; then
-              echo "Projet sélectionné depuis : ${archive#"$GITHUB_WORKSPACE"/}"
-              echo "PROJ=$projet" >> "$GITHUB_ENV"
-              exit 0
-            fi
-          done < <(find "$GITHUB_WORKSPACE" -name .git -prune -o \
-                    -type f -iname '*.zip' -print0)
-
-          if [[ "$nombre_zip" -eq 0 ]]; then
-            echo "::error::Cette branche ne contient ni ZIP ni projet décompressé avec EventListener.java. Ajoute le ZIP des sources 0.1.14 sur cette même branche."
-          else
-            echo "::error::Aucun des $nombre_zip ZIP examinés ne contient le projet complet avec le mode écoute. Vérifie que tu as envoyé le ZIP produit par le générateur 0.1.14."
-          fi
-          exit 1
-
-      - name: Installer Java 21
-        uses: actions/setup-java@v5
+          ''', encoding="utf-8")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              print(f"PROJ={project}", file=env)
+          print("Mode écoute ajouté à partir de", archives[0].name)
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-
-      - name: Installer le SDK Android
-        uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools platforms;android-37 build-tools;37.0.0'
-
-      - name: Compiler l’APK
+      - name: Compiler
         working-directory: ${{ env.PROJ }}
         run: bash ./gradlew --no-daemon --stacktrace :app:assembleDebug
-
-      - name: Publier l’APK
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: Remote-Sharp-0.1.14-APK
           path: ${{ env.PROJ }}/app/build/outputs/apk/debug/*.apk
