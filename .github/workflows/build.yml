@@ -9,11 +9,45 @@ permissions:
 
 jobs:
   build:
+    name: Compiler Remote Sharp 0.1.14
     runs-on: ubuntu-24.04
 
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v5
+
+      - name: Décompresser le projet
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          archive="$GITHUB_WORKSPACE/Remote-Sharp-0.1.14-Sources.zip"
+          destination="$RUNNER_TEMP/remote-sharp"
+
+          if [[ ! -f "$archive" ]]; then
+            echo "::error::Place Remote-Sharp-0.1.14-Sources.zip à la racine du dépôt."
+            exit 1
+          fi
+
+          mkdir -p "$destination"
+          unzip -q "$archive" -d "$destination"
+
+          projets=()
+          while IFS= read -r -d '' wrapper; do
+            dossier="$(dirname "$wrapper")"
+            if [[ -f "$dossier/settings.gradle.kts" &&
+                  -f "$dossier/app/src/main/java/fr/remote/sharp/EventListener.java" ]]; then
+              projets+=("$dossier")
+            fi
+          done < <(find "$destination" -type f -name gradlew -print0)
+
+          if [[ ${#projets[@]} -ne 1 ]]; then
+            echo "::error::Le ZIP doit contenir un seul projet Remote Sharp 0.1.14 avec gradlew et EventListener.java."
+            exit 1
+          fi
+
+          echo "PROJ=${projets[0]}" >> "$GITHUB_ENV"
+          echo "Projet trouvé dans ${projets[0]}"
 
       - name: Installer Java 21
         uses: actions/setup-java@v5
@@ -21,33 +55,10 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Préparer le SDK Android
-        uses: android-actions/setup-android@v3
-
-      - name: Installer les outils Android du projet
-        run: sdkmanager "platforms;android-37" "build-tools;37.0.0"
-
-      - name: Trouver le projet Remote Sharp
-        shell: bash
-        run: |
-          set -euo pipefail
-          projets=()
-
-          while IFS= read -r -d '' wrapper; do
-            dossier=$(dirname "$wrapper")
-            if [[ -f "$dossier/settings.gradle.kts" &&
-                  -f "$dossier/app/src/main/java/fr/remote/sharp/EventListener.java" ]]; then
-              projets+=("$dossier")
-            fi
-          done < <(find . -name .git -prune -o -type f -name gradlew -print0)
-
-          if [[ ${#projets[@]} -ne 1 ]]; then
-            echo "::error::Nombre de projets Remote Sharp avec le mode écoute trouvés : ${#projets[@]}. Il en faut un. Vérifie que les sources 0.1.14 sont décompressées dans le dépôt."
-            exit 1
-          fi
-
-          echo "PROJ=${projets[0]}" >> "$GITHUB_ENV"
-          echo "Projet trouvé dans ${projets[0]}"
+      - name: Installer le SDK Android
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platform-tools platforms;android-37 build-tools;37.0.0'
 
       - name: Compiler l’APK
         working-directory: ${{ env.PROJ }}
